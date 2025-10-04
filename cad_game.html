@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AutoCAD Floor Plan Arcade Game</title>
+<style>
+body {
+    font-family: 'Arial', sans-serif;
+    margin: 0;
+    background: linear-gradient(to right, #00c6ff, #0072ff);
+    color: #fff;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    overflow-x: hidden;
+}
+.container {
+    background: rgba(255,255,255,0.95);
+    color: #333;
+    border-radius: 15px;
+    padding: 30px;
+    max-width: 900px;
+    width: 90%;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+    position: relative;
+    overflow: hidden;
+}
+h1, h2 { text-align: center; margin-bottom: 20px; }
+button {
+    padding: 12px 25px;
+    font-size: 16px;
+    margin-top: 20px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    background: linear-gradient(to right, #ff6a00, #ee0979);
+    color: #fff;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+button:hover { transform: scale(1.05); box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+.hidden { display: none; }
+.question {
+    background: linear-gradient(to right, #f9f9f9, #e0f7fa);
+    padding: 15px;
+    margin-bottom: 15px;
+    border-radius: 10px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+    transition: transform 0.2s;
+}
+.question:hover { transform: translateY(-3px); }
+.options label { display: block; margin: 5px 0; cursor: pointer; }
+.correct { background-color: #c8e6c9 !important; transition: 0.3s; }
+.incorrect { background-color: #ffcdd2 !important; transition: 0.3s; }
+.match-container { display: flex; justify-content: space-between; margin-top: 15px; flex-wrap: wrap; }
+.draggable, .droppable {
+    padding: 12px;
+    background: #4fc3f7;
+    margin: 8px;
+    border-radius: 8px;
+    cursor: grab;
+    min-width: 220px;
+    text-align: center;
+    font-weight: bold;
+    color: #fff;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    transition: transform 0.2s;
+}
+.draggable:hover { transform: scale(1.05); }
+.droppable { background: #ffb74d; }
+#timer { font-size:18px; font-weight:bold; text-align:center; margin-bottom:15px; color:#ff1744; }
+.point-popup {
+    position: absolute;
+    font-weight: bold;
+    color: gold;
+    font-size: 20px;
+    text-shadow: 1px 1px 3px #000;
+    animation: rise 1s ease-out forwards;
+    pointer-events: none;
+}
+@keyframes rise {
+    0% { transform: translateY(0); opacity: 1; }
+    100% { transform: translateY(-50px); opacity: 0; }
+}
+.confetti-piece {
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    background: red;
+    opacity: 0.7;
+    pointer-events: none;
+    z-index: 1000;
+}
+</style>
+</head>
+<body>
+
+<div class="container">
+<div id="start-screen">
+    <h1>AutoCAD Floor Plan Arcade Game</h1>
+    <p>Answer fast and earn points! Test your knowledge of essential AutoCAD commands!</p>
+    <button onclick="startGame()">Start Game</button>
+</div>
+
+<div id="mcq-screen" class="hidden">
+    <h2>Multiple Choice Questions</h2>
+    <div id="timer"></div>
+    <div id="mcq-container"></div>
+</div>
+
+<div id="match-screen" class="hidden">
+    <h2>Matching Game</h2>
+    <p>Drag the command to its correct description.</p>
+    <div class="match-container">
+        <div id="commands"></div>
+        <div id="descriptions"></div>
+    </div>
+    <button onclick="finishQuiz()">Finish Quiz</button>
+</div>
+
+<div id="score-screen" class="hidden">
+    <h2>🎉 Congratulations! 🎉</h2>
+    <p id="score-text" style="font-size:20px;font-weight:bold;"></p>
+    <button onclick="restartGame()">Play Again</button>
+</div>
+</div>
+
+<!-- Sound Effects -->
+<audio id="correct-sound" src="https://www.soundjay.com/buttons/sounds/button-4.mp3"></audio>
+<audio id="wrong-sound" src="https://www.soundjay.com/buttons/sounds/button-10.mp3"></audio>
+
+<script>
+let score = 0;
+let timerInterval;
+let timeLeft = 15;
+
+// MCQs
+const mcqQuestions = [
+    {q:"Which command is used to draw walls, partitions, and outlines?", options:["LINE","OFFSET","RECTANGLE","TRIM"], answer:"LINE"},
+    {q:"Which command gives walls thickness or creates parallel walls?", options:["OFFSET","LINE","DIMENSION","BLOCK"], answer:"OFFSET"},
+    {q:"Which command is useful for quickly drawing the outer shape of rooms?", options:["RECTANGLE","LINE","TRIM","INSERT"], answer:"RECTANGLE"},
+    {q:"Which command cleans up lines after drawing walls, doors, or windows?", options:["TRIM","LINE","DIMENSION","OFFSET"], answer:"TRIM"},
+    {q:"Which command is used to add doors, windows, sinks, or furniture?", options:["BLOCK/INSERT","OFFSET","LINE","RECTANGLE"], answer:"BLOCK/INSERT"},
+    {q:"Which command adds accurate measurements of rooms, walls, or openings?", options:["DIMENSION","LINE","TRIM","BLOCK"], answer:"DIMENSION"}
+];
+
+// Matching
+const matchItems = [
+    {command:"LINE", description:"Used for walls, partitions, and outlines of rooms."},
+    {command:"OFFSET", description:"Gives walls thickness or creates parallel walls."},
+    {command:"RECTANGLE", description:"Quickly draws the outer shape of rooms."},
+    {command:"TRIM", description:"Cleans up lines after walls, doors, or windows are drawn."},
+    {command:"BLOCK/INSERT", description:"Adds standard objects like doors, windows, sinks, or furniture."},
+    {command:"DIMENSION", description:"Adds accurate measurements of rooms, walls, and openings."}
+];
+
+// Start Game
+function startGame(){
+    document.getElementById('start-screen').classList.add('hidden');
+    document.getElementById('mcq-screen').classList.remove('hidden');
+    loadMCQ();
+    startTimer();
+}
+
+// Timer
+function startTimer(){
+    timeLeft = 15;
+    document.getElementById('timer').textContent = `Time left: ${timeLeft}s`;
+    timerInterval = setInterval(()=>{
+        timeLeft--;
+        document.getElementById('timer').textContent = `Time left: ${timeLeft}s`;
+        if(timeLeft <= 0){
+            clearInterval(timerInterval);
+            goToMatching();
+        }
+    },1000);
+}
+
+// Load MCQ
+function loadMCQ(){
+    const container = document.getElementById('mcq-container');
+    container.innerHTML = '';
+    mcqQuestions.forEach((item,index)=>{
+        let qDiv = document.createElement('div');
+        qDiv.className = 'question';
+        qDiv.id = 'q'+index;
+        qDiv.innerHTML = `<p>${index+1}. ${item.q}</p>`;
+        item.options.forEach(opt=>{
+            qDiv.innerHTML += `<label><input type="radio" name="q${index}" value="${opt}" onclick="checkAnswer(${index},'${opt}',event)"> ${opt}</label>`;
+        });
+        container.appendChild(qDiv);
+    });
+}
+
+// Check answer and popup points
+function checkAnswer(index, value, event){
+    const correctSound = document.getElementById('correct-sound');
+    const wrongSound = document.getElementById('wrong-sound');
+    const question = document.getElementById('q'+index);
+    const correctAnswer = mcqQuestions[index].answer;
+
+    if(value === correctAnswer){
+        score += 10;
+        question.classList.add('correct');
+        correctSound.play();
+        showPointPopup(event.clientX, event.clientY, '+10');
+    } else {
+        question.classList.add('incorrect');
+        wrongSound.play();
+    }
+}
+
+// Point popup
+function showPointPopup(x, y, text){
+    const popup = document.createElement('div');
+    popup.className = 'point-popup';
+    popup.style.left = x+'px';
+    popup.style.top = y+'px';
+    popup.textContent = text;
+    document.body.appendChild(popup);
+    setTimeout(()=> popup.remove(),1000);
+}
+
+// Go to Matching
+function goToMatching(){
+    clearInterval(timerInterval);
+    document.getElementById('mcq-screen').classList.add('hidden');
+    document.getElementById('match-screen').classList.remove('hidden');
+    loadMatching();
+}
+
+// Load Matching
+function loadMatching(){
+    const commandsDiv = document.getElementById('commands');
+    const descDiv = document.getElementById('descriptions');
+    commandsDiv.innerHTML = '';
+    descDiv.innerHTML = '';
+    matchItems.forEach((item,index)=>{
+        let cmd = document.createElement('div');
+        cmd.className = 'draggable';
+        cmd.draggable = true;
+        cmd.id = 'cmd'+index;
+        cmd.textContent = item.command;
+        commandsDiv.appendChild(cmd);
+
+        let desc = document.createElement('div');
+        desc.className = 'droppable';
+        desc.dataset.answer = 'cmd'+index;
+        desc.textContent = item.description;
+        descDiv.appendChild(desc);
+    });
+
+    const draggables = document.querySelectorAll('.draggable');
+    const droppables = document.querySelectorAll('.droppable');
+
+    draggables.forEach(d=>{
+        d.addEventListener('dragstart', e=> e.dataTransfer.setData('text', e.target.id));
+    });
+    droppables.forEach(d=>{
+        d.addEventListener('dragover', e=> e.preventDefault());
+        d.addEventListener('drop', e=>{
+            e.preventDefault();
+            const draggedId = e.dataTransfer.getData('text');
+            e.target.textContent = document.getElementById(draggedId).textContent;
+            e.target.dataset.userAnswer = draggedId;
+        });
+    });
+}
+
+// Finish Quiz
+function finishQuiz(){
+    const droppables = document.querySelectorAll('.droppable');
+    droppables.forEach(d=>{
+        if(d.dataset.userAnswer === d.dataset.answer){
+            score += 10;
+        }
+    });
+    document.getElementById('match-screen').classList.add('hidden');
+    document.getElementById('score-screen').classList.remove('hidden');
+    document.getElementById('score-text').textContent = `Your total score: ${score} / 120 🎉`;
+    launchConfetti();
+}
+
+// Restart
+function restartGame(){
+    score = 0;
+    document.getElementById('score-screen').classList.add('hidden');
+    document.getElementById('start-screen').classList.remove('hidden');
+}
+
+// Confetti animation
+function launchConfetti(){
+    const container = document.querySelector('.container');
+    for(let i=0;i<100;i++){
+        const confetti = document.createElement('div');
+        confetti.className = 'confetti-piece';
+        confetti.style.background = `hsl(${Math.random()*360}, 100%, 50%)`;
+        confetti.style.left = Math.random()*container.offsetWidth + 'px';
+        confetti.style.top = '-10px';
+        container.appendChild(confetti);
+        animateConfetti(confetti);
+    }
+}
+function animateConfetti(confetti){
+    let top = -10;
+    const fall = setInterval(()=>{
+        top += 5 + Math.random()*5;
+        confetti.style.top = top+'px';
+        confetti.style.transform = `rotate(${top*2}deg)`;
+        if(top > 600){
+            confetti.remove();
+            clearInterval(fall);
+        }
+    },30);
+}
+</script>
+</body>
+</html>
